@@ -3,6 +3,9 @@
 Trabalho da disciplina de **Sistemas Distribuídos** — UEMG, Sistemas de Informação  
 Implementação do problema clássico do **Barbeiro Dorminhoco** usando troca de mensagens entre processos.
 
+## 👥 Grupo
+Alunos: José Rodrigues, Julia Alves e Maria Fernanda Mariano
+
 ---
 
 ## 📋 Descrição do Problema
@@ -105,9 +108,6 @@ TEMPO_CHEGADA = 0.8 # intervalo base entre chegadas de clientes
 ```
 
 ---
-
-## 👥 Grupo
-
 
 
 **Disciplina:** Sistemas Distribuídos  
