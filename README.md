@@ -1,9 +1,10 @@
 # 💈 Soneca Barber — Simulação com Processos Distribuídos
 
 Trabalho da disciplina de **Sistemas Distribuídos** — UEMG, Sistemas de Informação  
-Implementação do problema clássico do **Barbeiro Dorminhoco** usando troca de mensagens entre processos.
+Implementação do problema clássico do **Barbeiro Dorminhoco** usando comunicação entre programas via **sockets TCP**.
 
 ## 👥 Grupo
+
 Alunos: José Rodrigues, Julia Alves e Maria Fernanda Mariano
 
 ---
@@ -25,38 +26,36 @@ A barbearia **Soneca Barber** tem um barbeiro que adora dormir. Quando não há 
 ## 🛠️ Tecnologias
 
 - **Python 3.x**
-- `multiprocessing` — criação de processos e comunicação via `Queue`
+- `socket` — comunicação entre programas via TCP
+- `threading` — gerenciamento de múltiplas conexões no servidor
 - Sem dependências externas
 
 ---
 
 ## 🏗️ Arquitetura
 
-A comunicação entre processos é feita exclusivamente por **troca de mensagens** através de uma `Queue` compartilhada, seguindo o modelo de sistemas distribuídos.
+A solução é composta por **dois programas independentes** que se comunicam exclusivamente via **troca de mensagens por sockets TCP**, sem nenhuma memória compartilhada entre eles — seguindo o modelo real de sistemas distribuídos.
 
 ```
-Cliente 1 ──┐
-Cliente 2 ──┼──► Queue (fila de espera) ──► Processo Barbeiro
-Cliente N ──┘
-                        ▲
-                   Lock (exclusão mútua nas variáveis de estado)
+[ cliente.py 1 ] ──┐
+[ cliente.py 2 ] ──┼──► socket TCP (porta 65432) ──► [ barbeiro.py ]
+[ cliente.py N ] ──┘
 ```
 
-### Processos
+### Programas
 
-- **`barbeiro_process`** — fica aguardando mensagens na fila; dorme quando está vazia
-- **`cliente_process`** — cada cliente é um processo independente; verifica vagas antes de entrar
-- **`log_process`** — processo auxiliar que centraliza os prints para evitar sobreposição de saída
+- **`barbeiro.py`** — servidor TCP; aguarda conexões de clientes, gerencia a fila de espera e simula o atendimento
+- **`cliente.py`** — cliente TCP; cada instância é um programa separado que se conecta ao barbeiro e aguarda resposta
 
-### Variáveis compartilhadas
+### Protocolo de mensagens
 
-| Variável | Tipo | Descrição |
-|----------|------|-----------|
-| `fila_espera` | `Queue` | Canal de mensagens entre clientes e barbeiro |
-| `cadeiras_ocupadas` | `Value('i')` | Contador de cadeiras de espera em uso |
-| `barbeiro_dormindo` | `Value('b')` | Flag de estado do barbeiro |
-| `barbeiro_ocupado` | `Value('b')` | Flag se barbeiro está atendendo |
-| `lock` | `Lock` | Garante exclusão mútua no acesso às variáveis |
+| Quem envia | Mensagem | Significado |
+|---|---|---|
+| Cliente → Barbeiro | `CHEGOU:<id>` | cliente chegou na barbearia |
+| Barbeiro → Cliente | `SENTE` | tem vaga, pode sentar e esperar |
+| Barbeiro → Cliente | `CHEIO` | sem vagas, vai embora |
+| Barbeiro → Cliente | `ATENDENDO` | é a sua vez na cadeira |
+| Barbeiro → Cliente | `PRONTO` | corte finalizado, pode ir |
 
 ---
 
@@ -64,52 +63,70 @@ Cliente N ──┘
 
 **Pré-requisito:** Python 3.x instalado
 
+**Terminal 1 — inicia o barbeiro (servidor):**
 ```bash
-python soneca_barber.py
+python barbeiro.py
 ```
+
+**Terminais 2, 3, 4... — cada cliente em um terminal separado:**
+```bash
+python cliente.py 1
+python cliente.py 2
+python cliente.py 3
+python cliente.py 4
+python cliente.py 5
+```
+
+> Para demonstrar a situação 3 (barbearia cheia), abra os 5 terminais rapidamente antes do barbeiro terminar o primeiro corte.
 
 ### Saída esperada
 
+**barbeiro.py:**
 ```
 ============================================================
-       SONECA BARBER - Simulação Sistemas Distribuídos
+       SONECA BARBER - Servidor do Barbeiro
+       Escutando em 127.0.0.1:65432
+       Cadeiras de espera: 3
 ============================================================
 
->>> SITUAÇÃO 1: Abrindo a barbearia
+[BARBEIRO] Barbearia aberta. Barbeiro dormindo... 💤
+[SERVIDOR] Aguardando clientes...
 
-[BARBEARIA] Abrindo... Barbeiro sentou na cadeira e dormiu. 💤
-
->>> SITUAÇÃO 2: Clientes chegando em sequência rápida
-
-[CLIENTE 1] Cheguei e o barbeiro tava dormindo. ACORDA! Hora de trabalhar seu dorminhoco! 😤
-[BARBEIRO] *esfregando os olhos* Ugh... acordei porque o Cliente 1 gritou ACORDA!
-[BARBEIRO] Atendendo o Cliente 1... (cadeiras de espera livres: 3)
-[CLIENTE 2] Cheguei, barbeiro ocupado. Sentei na cadeira de espera. (1/3 cadeiras ocupadas)
-[CLIENTE 3] Cheguei, barbeiro ocupado. Sentei na cadeira de espera. (2/3 cadeiras ocupadas)
-[CLIENTE 4] Cheguei, barbeiro ocupado. Sentei na cadeira de espera. (3/3 cadeiras ocupadas)
-
->>> SITUAÇÃO 3: Cliente tentando entrar com barbearia cheia
-
-[CLIENTE 99] Cheguei mas todas as 3 cadeiras de espera estão ocupadas. Vou embora! 😒
+[BARBEIRO] Mensagem recebida: 'CHEGOU:1' de ('127.0.0.1', 64575)
+[BARBEIRO] Cliente 1 entrou na fila de espera. (1/3 cadeiras ocupadas)
+[BARBEIRO] Chamando Cliente 1. PRÓXIMO!
+[BARBEIRO] Cortando o cabelo do Cliente 1...
+[BARBEIRO] Cliente 2 entrou na fila de espera. (1/3 cadeiras ocupadas)
+[BARBEIRO] Cliente 3 entrou na fila de espera. (2/3 cadeiras ocupadas)
+[BARBEIRO] Cliente 4 entrou na fila de espera. (3/3 cadeiras ocupadas)
+[BARBEIRO] Sem vagas! Mandando Cliente 5 embora.
+[BARBEIRO] Pronto! Cliente 1 atendido.
 ...
-[BARBEIRO] Fila vazia... voltando a dormir. 💤
+[BARBEIRO] Fila vazia. Voltando a dormir... 💤
+```
+
+**cliente.py 5 (barbearia cheia):**
+```
+[CLIENTE 5] Chegando na barbearia...
+[CLIENTE 5] Mensagem enviada: 'CHEGOU:5'
+[CLIENTE 5] Resposta recebida: 'CHEIO'
+[CLIENTE 5] Todas as cadeiras ocupadas. Vou embora! 😒
 ```
 
 ---
 
 ## ⚙️ Configurações
 
-As constantes no início do arquivo permitem ajustar o comportamento da simulação:
+As constantes no início de `barbeiro.py` permitem ajustar o comportamento:
 
 ```python
-MAX_ESPERA   = 3    # número de cadeiras de espera
-TEMPO_CORTE  = 1.5  # segundos simulando a duração de um corte
-TEMPO_CHEGADA = 0.8 # intervalo base entre chegadas de clientes
+MAX_ESPERA  = 3    # número de cadeiras de espera
+TEMPO_CORTE = 10   # segundos simulando a duração de um corte
+PORT        = 65432
 ```
 
 ---
 
-
 **Disciplina:** Sistemas Distribuídos  
 **Instituição:** UEMG — Universidade do Estado de Minas Gerais  
-**Entrega:** 29/06/2026
+**Entrega:** 28/06/2026
